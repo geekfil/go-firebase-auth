@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -17,40 +16,32 @@ type DeleteAccountResponse struct {
 }
 
 func (client *Client) DeleteAccount(idToken string) (*DeleteAccountResponse, error) {
-	data, err := json.Marshal(&DeleteAccountRequest{
+	buff := &bytes.Buffer{}
+	if err := json.NewEncoder(buff).Encode(&DeleteAccountRequest{
 		IdToken: idToken,
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
-	httpClient := &http.Client{}
-
-	httpReq, err := http.NewRequest("POST", client.getUrl("deleteAccount"), bytes.NewBuffer(data))
+	req, err := http.NewRequest("POST", client.getUrl("deleteAccount"), buff)
+	req.Header.Set("Content-Type", client.httpHeaderContentType)
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", client.httpHeaderContentType)
-	httpRes, err := httpClient.Do(httpReq)
+	defer res.Body.Close()
 
-	defer httpRes.Body.Close()
-	resByte, err := ioutil.ReadAll(httpRes.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if httpRes.StatusCode == http.StatusOK {
-		resData := &DeleteAccountResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+	if res.StatusCode == http.StatusOK {
+		data := &DeleteAccountResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return resData, nil
+		return data, nil
 	} else {
-		resData := &ErrorResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+		data := &ErrorResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return nil, errors.New(resData.Error.Message)
+		return nil, errors.New(data.Error.Message)
 	}
-
 }

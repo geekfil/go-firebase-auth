@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -23,12 +22,12 @@ type LinkWithOAuthCredentialResponse struct {
 	LocalID       string `json:"localId"`
 	EmailVerified bool   `json:"emailVerified"`
 	Email         string `json:"email"`
-	OauthIDToken  string `json:"oauthIdToken"`
+	OauthIdToken  string `json:"oauthIdToken"`
 	FirstName     string `json:"firstName"`
 	LastName      string `json:"lastName"`
 	FullName      string `json:"fullName"`
 	DisplayName   string `json:"displayName"`
-	IDToken       string `json:"idToken"`
+	IdToken       string `json:"idToken"`
 	PhotoURL      string `json:"photoUrl"`
 	RefreshToken  string `json:"refreshToken"`
 	ExpiresIn     string `json:"expiresIn"`
@@ -36,45 +35,37 @@ type LinkWithOAuthCredentialResponse struct {
 }
 
 func (client *Client) LinkWithOAuthCredential(idToken, requestUri, postBody string) (*LinkWithOAuthCredentialResponse, error) {
-	data, err := json.Marshal(&LinkWithOAuthCredentialRequest{
+	buff := &bytes.Buffer{}
+	if err := json.NewEncoder(buff).Encode(&LinkWithOAuthCredentialRequest{
 		IdToken:             idToken,
 		RequestUri:          requestUri,
 		PostBody:            postBody,
 		ReturnSecureToken:   true,
 		ReturnIdpCredential: "EMAIL_EXISTS",
-	})
-	if err != nil {
-		return nil, err
-	}
-	httpClient := &http.Client{}
-	httpReq, err := http.NewRequest("POST", client.getUrl("verifyAssertion"), bytes.NewBuffer(data))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", client.httpHeaderContentType)
-	httpRes, err := httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer httpRes.Body.Close()
-
-	resByte, err := ioutil.ReadAll(httpRes.Body)
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
-	if httpRes.StatusCode == http.StatusOK {
-		resData := &LinkWithOAuthCredentialResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+	req, err := http.NewRequest("POST", client.getUrl("verifyAssertion"), buff)
+	req.Header.Set("Content-Type", client.httpHeaderContentType)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode == http.StatusOK {
+		data := &LinkWithOAuthCredentialResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return resData, nil
+		return data, nil
 	} else {
-		resData := &ErrorResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+		data := &ErrorResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return nil, errors.New(resData.Error.Message)
+		return nil, errors.New(data.Error.Message)
 	}
 
 }

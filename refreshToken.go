@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -18,43 +17,39 @@ type RefreshTokenResponse struct {
 	ExpiresIn    string `json:"expires_in"`
 	TokenType    string `json:"token_type"`
 	RefreshToken string `json:"refresh_token"`
-	IDToken      string `json:"id_token"`
+	IdToken      string `json:"id_token"`
 	UserID       string `json:"user_id"`
 	ProjectID    string `json:"project_id"`
 }
 
 func (client *Client) RefreshToken(refreshToken string) (*RefreshTokenResponse, error) {
-	data, err := json.Marshal(&RefreshTokenRequest{
+	buff := &bytes.Buffer{}
+	if err := json.NewEncoder(buff).Encode(&RefreshTokenRequest{
 		RefreshToken: refreshToken,
 		GrantType:    "refresh_token",
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
-	httpRes, err := http.Post(fmt.Sprintf("https://securetoken.googleapis.com/v1/token?key=%s", client.apiKey), "application/x-www-form-urlencoded", bytes.NewReader(data))
+	req, err := http.NewRequest("POST", fmt.Sprintf("https://securetoken.googleapis.com/v1/token?key=%s", client.apiKey), buff)
+	req.Header.Set("Content-Type", client.httpHeaderContentType)
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
+	defer res.Body.Close()
 
-	defer httpRes.Body.Close()
-	resByte, err := ioutil.ReadAll(httpRes.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if httpRes.StatusCode == http.StatusOK {
-		resData := &RefreshTokenResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+	if res.StatusCode == http.StatusOK {
+		data := &RefreshTokenResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return resData, nil
+		return data, nil
 	} else {
-		resData := &ErrorResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+		data := &ErrorResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return nil, errors.New(resData.Error.Message)
+		return nil, errors.New(data.Error.Message)
 	}
-
 }

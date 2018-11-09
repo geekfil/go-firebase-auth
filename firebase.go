@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	baseUrl = "https://www.googleapis.com/identitytoolkit/v3/relyingparty/"
+	baseUrl = "https://www.googleapis.com/identitytoolkit/v3/relyingparty"
 )
 
 type ErrorResponse struct {
@@ -33,6 +33,6 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
-func (client *Client) getUrl(path string) string {
+func (client *Client) getUrl(path string) (string) {
 	return fmt.Sprintf("%s/%s?key=%s", client.apiEndpointFirestore, path, client.apiKey)
 }

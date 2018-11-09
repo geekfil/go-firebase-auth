@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -20,42 +19,32 @@ type ConfirmPasswordResetResponse struct {
 }
 
 func (client *Client) ConfirmPasswordReset(oobCode string) (*ConfirmPasswordResetResponse, error) {
-	data, err := json.Marshal(&ConfirmPasswordResetRequest{
+	buff := &bytes.Buffer{}
+	if err := json.NewEncoder(buff).Encode(&ConfirmPasswordResetRequest{
 		OobCode: oobCode,
-	})
-	if err != nil {
-		return nil, err
-	}
-	httpClient := &http.Client{}
-
-	httpReq, err := http.NewRequest("POST", client.getUrl("resetPassword"), bytes.NewBuffer(data))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", client.httpHeaderContentType)
-	httpRes, err := httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer httpRes.Body.Close()
-
-	resByte, err := ioutil.ReadAll(httpRes.Body)
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
-	if httpRes.StatusCode == http.StatusOK {
-		resData := &ConfirmPasswordResetResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+	req, err := http.NewRequest("POST", client.getUrl("resetPassword"), buff)
+	req.Header.Set("Content-Type", client.httpHeaderContentType)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode == http.StatusOK {
+		data := &ConfirmPasswordResetResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return resData, nil
+		return data, nil
 	} else {
-		resData := &ErrorResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+		data := &ErrorResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return nil, errors.New(resData.Error.Message)
+		return nil, errors.New(data.Error.Message)
 	}
-
 }

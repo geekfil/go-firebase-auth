@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -41,39 +40,30 @@ type GetAccountInfoResponse struct {
 
 func (client *Client) GetAccountInfo(dataProfile *GetAccountInfoRequest) (*GetAccountInfoResponse, error) {
 
-	data, err := json.Marshal(dataProfile)
-	if err != nil {
-		return nil, err
-	}
-	httpClient := &http.Client{}
-	httpReq, err := http.NewRequest("POST", client.getUrl("getAccountInfo"), bytes.NewBuffer(data))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", client.httpHeaderContentType)
-	httpRes, err := httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer httpRes.Body.Close()
-
-	resByte, err := ioutil.ReadAll(httpRes.Body)
-	if err != nil {
+	buff := &bytes.Buffer{}
+	if err := json.NewEncoder(buff).Encode(dataProfile); err != nil {
 		return nil, err
 	}
 
-	if httpRes.StatusCode == http.StatusOK {
-		resData := &GetAccountInfoResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+	req, err := http.NewRequest("POST", client.getUrl("getAccountInfo"), buff)
+	req.Header.Set("Content-Type", client.httpHeaderContentType)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode == http.StatusOK {
+		data := &GetAccountInfoResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return resData, nil
+		return data, nil
 	} else {
-		resData := &ErrorResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+		data := &ErrorResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return nil, errors.New(resData.Error.Message)
+		return nil, errors.New(data.Error.Message)
 	}
-
 }

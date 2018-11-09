@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -19,44 +18,41 @@ type SigninWithEmailPasswordResponse struct {
 	LocalID      string `json:"localId"`
 	Email        string `json:"email"`
 	DisplayName  string `json:"displayName"`
-	IDToken      string `json:"idToken"`
+	IdToken      string `json:"idToken"`
 	Registered   bool   `json:"registered"`
 	RefreshToken string `json:"refreshToken"`
 	ExpiresIn    string `json:"expiresIn"`
 }
 
 func (client *Client) SigninWithEmailPassword(email, password string) (*SigninWithEmailPasswordResponse, error) {
-	data, err := json.Marshal(&SigninWithEmailPasswordRequest{
+	buff := &bytes.Buffer{}
+	if err := json.NewEncoder(buff).Encode(&SigninWithEmailPasswordRequest{
 		Email:             email,
 		Password:          password,
 		ReturnSecureToken: true,
-	})
+	}); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest("POST", client.getUrl("verifyPassword"), buff)
+	req.Header.Set("Content-Type", client.httpHeaderContentType)
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	httpRes, err := http.Post(client.getUrl("verifyPassword"), client.httpHeaderContentType, bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
+	defer res.Body.Close()
 
-	defer httpRes.Body.Close()
-	resByte, err := ioutil.ReadAll(httpRes.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if httpRes.StatusCode == http.StatusOK {
-		resData := &SigninWithEmailPasswordResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+	if res.StatusCode == http.StatusOK {
+		data := &SigninWithEmailPasswordResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return resData, nil
+		return data, nil
 	} else {
-		resData := &ErrorResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+		data := &ErrorResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return nil, errors.New(resData.Error.Message)
+		return nil, errors.New(data.Error.Message)
 	}
 
 }

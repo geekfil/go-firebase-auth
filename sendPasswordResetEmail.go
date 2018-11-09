@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -19,44 +18,35 @@ type SendPasswordResetEmailResponse struct {
 }
 
 func (client *Client) SendPasswordResetEmail(email, locale string) (*SendPasswordResetEmailResponse, error) {
-	data, err := json.Marshal(&SendPasswordResetEmailRequest{
+	buff := &bytes.Buffer{}
+	if err := json.NewEncoder(buff).Encode(&SendPasswordResetEmailRequest{
 		Email:       email,
 		RequestType: "PASSWORD_RESET",
-	})
-	if err != nil {
-		return nil, err
-	}
-	httpClient := &http.Client{}
-
-	httpReq, err := http.NewRequest("POST", client.getUrl("getOobConfirmationCode"), bytes.NewBuffer(data))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", client.httpHeaderContentType)
-	httpReq.Header.Set("X-Firebase-Locale", locale)
-	httpRes, err := httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer httpRes.Body.Close()
-
-	resByte, err := ioutil.ReadAll(httpRes.Body)
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
-	if httpRes.StatusCode == http.StatusOK {
-		resData := &SendPasswordResetEmailResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+	req, err := http.NewRequest("POST", client.getUrl("getOobConfirmationCode"), buff)
+	req.Header.Set("Content-Type", client.httpHeaderContentType)
+	req.Header.Set("X-Firebase-Locale", locale)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode == http.StatusOK {
+		data := &SendPasswordResetEmailResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return resData, nil
+		return data, nil
 	} else {
-		resData := &ErrorResponse{}
-		if json.Unmarshal(resByte, resData) != nil {
+		data := &ErrorResponse{}
+		if json.NewDecoder(res.Body).Decode(data) != nil {
 			return nil, err
 		}
-		return nil, errors.New(resData.Error.Message)
+		return nil, errors.New(data.Error.Message)
 	}
 
 }
